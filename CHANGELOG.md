@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.0 - Monorepo Support
+
+- Monorepo support: auto-detects all pubspec.yaml files and groups packages by project
+- Smarter version checks using pubspec.lock for caret dependencies
+- Lots of bug fixes and improvements to make things faster and more reliable
+
 ## 1.5.0 - Respect Version Constraints
 
 - Updater now respects caret (^) constraints in pubspec.yaml

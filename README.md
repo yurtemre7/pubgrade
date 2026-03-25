@@ -21,6 +21,7 @@ If you like this package, consider checking [UserOrient](https://userorient.com)
 - **One-click updates** - Update to any version directly from changelog (respects `^` constraints)
 - **Automatic sorting** - Outdated packages shown first
 - **Update type indicators** - Color-coded icons for major (🔴), minor (🟡), and patch (🔵) updates
+- **Monorepo support** - Auto-detects all `pubspec.yaml` files and groups packages by project
 
 ## Usage
 
