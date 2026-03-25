@@ -5,7 +5,7 @@ import { PubDevClient } from './pubdevClient';
 import { PackageTreeProvider } from './treeProvider';
 import { ChangelogView } from './changelogView';
 import { Updater } from './updater';
-import { PackageInfo } from './types';
+import { PackageInfo, PubspecDependency } from './types';
 
 let treeProvider: PackageTreeProvider;
 let statusBarItem: vscode.StatusBarItem;
@@ -41,7 +41,9 @@ export function activate(context: vscode.ExtensionContext) {
             item.packageInfo.latestVersion
           );
           if (success) {
-            setTimeout(() => refreshPackages(), 1000);
+            treeProvider.updatePackage(item.packageInfo.name, item.packageInfo.latestVersion);
+            updateBadge();
+            updateStatusBar();
           }
         }
       }
@@ -85,23 +87,29 @@ async function findPubspecPath(): Promise<string | null> {
 }
 
 // --- 1. Helper function to process a SINGLE package ---
-async function fetchPackageInfo(dep: any): Promise<PackageInfo | null> {
+async function fetchPackageInfo(
+  dep: PubspecDependency,
+  lockVersions: Map<string, string> | null
+): Promise<PackageInfo | null> {
   try {
-    const cleanVersion = PubspecParser.cleanVersion(dep.version);
     const latestVersion = await PubDevClient.getLatestVersion(dep.name);
+    if (!latestVersion) return null;
 
-    if (latestVersion) {
-      const isOutdated = PubDevClient.isOutdated(cleanVersion, latestVersion);
-      const updateType = PubDevClient.getUpdateType(cleanVersion, latestVersion);
-      
-      return {
-        name: dep.name,
-        currentVersion: cleanVersion,
-        latestVersion: latestVersion,
-        isOutdated: isOutdated,
-        updateType: updateType
-      };
-    }
+    // Use lock file version for caret deps (actual installed version), yaml version otherwise
+    const compareVersion = (dep.hasCaret && lockVersions?.has(dep.name))
+      ? lockVersions.get(dep.name)!
+      : PubspecParser.cleanVersion(dep.version);
+
+    const isOutdated = PubDevClient.isOutdated(compareVersion, latestVersion);
+    const updateType = PubDevClient.getUpdateType(compareVersion, latestVersion);
+
+    return {
+      name: dep.name,
+      currentVersion: compareVersion,
+      latestVersion: latestVersion,
+      isOutdated,
+      updateType
+    };
   } catch (e) {
     console.error(`Error fetching ${dep.name}:`, e);
   }
@@ -124,7 +132,11 @@ async function refreshPackages() {
       async (progress) => {
         const dependencies = PubspecParser.parse(pubspecPath);
         const packages: PackageInfo[] = [];
-        
+
+        // Parse lock file once if any dependency uses caret
+        const hasCaretDeps = dependencies.some(d => d.hasCaret);
+        const lockVersions = hasCaretDeps ? PubspecParser.parseLockFile(pubspecPath) : null;
+
         // --- 2. Setup the Worker Pool ---
         const queue = [...dependencies]; // Clone the array to act as a queue
         const totalPackages = dependencies.length;
@@ -138,7 +150,7 @@ async function refreshPackages() {
                 if (!dep) break;
 
                 // Fetch data
-                const result = await fetchPackageInfo(dep);
+                const result = await fetchPackageInfo(dep, lockVersions);
                 if (result) {
                     packages.push(result);
                 }
@@ -222,7 +234,9 @@ async function showChangelogAsDocument(packageInfo: PackageInfo) {
         if (pubspecPath) {
           const success = await Updater.updatePackage(pubspecPath, packageName, version);
           if (success) {
-            setTimeout(() => refreshPackages(), 1000);
+            treeProvider.updatePackage(packageName, version);
+            updateBadge();
+            updateStatusBar();
           }
         }
       }

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PackageInfo } from './types';
+import { PubDevClient } from './pubdevClient';
 
 export class PackageTreeItem extends vscode.TreeItem {
   constructor(
@@ -54,6 +55,16 @@ export class PackageTreeProvider implements vscode.TreeDataProvider<PackageTreeI
 
   setPackages(packages: PackageInfo[]) {
     this.packages = packages;
+    this._onDidChangeTreeData.fire();
+  }
+
+  updatePackage(name: string, newVersion: string) {
+    const pkg = this.packages.find(p => p.name === name);
+    if (!pkg) return;
+
+    pkg.currentVersion = newVersion;
+    pkg.isOutdated = PubDevClient.isOutdated(newVersion, pkg.latestVersion);
+    pkg.updateType = PubDevClient.getUpdateType(newVersion, pkg.latestVersion);
     this._onDidChangeTreeData.fire();
   }
 

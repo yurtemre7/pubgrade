@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { PubspecDependency } from './types';
 
@@ -8,33 +9,42 @@ export class PubspecParser {
     const doc = yaml.load(content) as any;
     const dependencies: PubspecDependency[] = [];
 
-    // Parse dependencies
-    if (doc.dependencies) {
-      Object.keys(doc.dependencies).forEach(name => {
-        if (name === 'flutter') return; // Skip flutter SDK
-        const version = doc.dependencies[name];
+    const parseDeps = (deps: Record<string, any>, isDev: boolean) => {
+      for (const name of Object.keys(deps)) {
+        if (name === 'flutter' || name === 'flutter_test') continue;
+        const version = deps[name];
         if (typeof version === 'string') {
-          dependencies.push({ name, version, isDev: false });
+          const hasCaret = version.trimStart().startsWith('^');
+          dependencies.push({ name, version, isDev, hasCaret });
         }
-      });
-    }
+      }
+    };
 
-    // Parse dev_dependencies
-    if (doc.dev_dependencies) {
-      Object.keys(doc.dev_dependencies).forEach(name => {
-        if (name === 'flutter_test') return; // Skip flutter test SDK
-        const version = doc.dev_dependencies[name];
-        if (typeof version === 'string') {
-          dependencies.push({ name, version, isDev: true });
-        }
-      });
-    }
+    if (doc.dependencies) parseDeps(doc.dependencies, false);
+    if (doc.dev_dependencies) parseDeps(doc.dev_dependencies, true);
 
     return dependencies;
   }
 
+  static parseLockFile(pubspecPath: string): Map<string, string> | null {
+    const lockPath = path.join(path.dirname(pubspecPath), 'pubspec.lock');
+    if (!fs.existsSync(lockPath)) return null;
+
+    const doc = yaml.load(fs.readFileSync(lockPath, 'utf8')) as any;
+    const versions = new Map<string, string>();
+
+    if (doc?.packages) {
+      for (const [name, info] of Object.entries<any>(doc.packages)) {
+        if (info?.version) {
+          versions.set(name, info.version);
+        }
+      }
+    }
+
+    return versions;
+  }
+
   static cleanVersion(version: string): string {
-    // Remove version constraints like ^, >=, etc.
     return version.replace(/^[\^>=<]+/, '').trim();
   }
 }
