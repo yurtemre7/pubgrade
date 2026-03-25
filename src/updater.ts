@@ -25,7 +25,6 @@ export class Updater {
       terminal.sendText('flutter pub get');
       terminal.show();
       
-      vscode.window.showInformationMessage(`Updated ${packageName} to ${newVersion}`);
       return true;
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to update ${packageName}: ${error}`);
