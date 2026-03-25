@@ -253,8 +253,10 @@ export class ChangelogView {
     let currentContent: string[] = [];
 
     for (const line of lines) {
-      // Match version headers: ## 1.2.3, # 1.2.3, ## [1.2.3], etc.
-      const versionMatch = line.match(/^#+\s*\[?v?(\d+\.\d+\.\d+[^\]\s]*)\]?/);
+      // Match version headers in two formats:
+      // 1. Markdown headings: ## 1.2.3, # 1.2.3, ## [1.2.3]
+      // 2. Plain version lines: v4.5.3 (some authors skip markdown headings entirely)
+      const versionMatch = line.match(/^(?:#+\s*\[?v?|v)(\d+\.\d+\.\d+[^\]\s]*)\]?\s*$/);
       
       if (versionMatch) {
         // Save previous section
