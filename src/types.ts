@@ -8,6 +8,8 @@ export interface PackageInfo {
   updateType: UpdateType;
   changelog?: string;
   publishedDate?: Date;
+  // Which pubspec.yaml this package belongs to (for monorepo update targeting)
+  pubspecPath?: string;
 }
 
 export interface PubspecDependency {
@@ -15,5 +17,12 @@ export interface PubspecDependency {
   version: string;
   isDev: boolean;
   hasCaret: boolean;
+}
+
+// Groups packages by their project (each pubspec.yaml = one project)
+export interface ProjectPackages {
+  projectName: string;
+  pubspecPath: string;
+  packages: PackageInfo[];
 }
 

@@ -1,7 +1,24 @@
 import * as vscode from 'vscode';
-import { PackageInfo } from './types';
+import { PackageInfo, ProjectPackages } from './types';
 import { PubDevClient } from './pubdevClient';
 
+// Parent node in monorepo mode — represents one pubspec.yaml project
+export class ProjectTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly project: ProjectPackages,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState
+  ) {
+    super(project.projectName, collapsibleState);
+
+    const outdated = project.packages.filter(p => p.isOutdated).length;
+    this.iconPath = new vscode.ThemeIcon('folder');
+    this.description = outdated > 0 ? `${outdated} outdated` : 'all up to date';
+
+    this.contextValue = 'project';
+  }
+}
+
+// Leaf node — represents a single dependency
 export class PackageTreeItem extends vscode.TreeItem {
   constructor(
     public readonly packageInfo: PackageInfo,
@@ -12,7 +29,6 @@ export class PackageTreeItem extends vscode.TreeItem {
     if (packageInfo.isOutdated) {
       this.description = `${packageInfo.currentVersion} → ${packageInfo.latestVersion}`;
 
-      // Set icon and tooltip based on update type
       switch (packageInfo.updateType) {
         case 'major':
           this.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
@@ -35,10 +51,9 @@ export class PackageTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'));
       this.tooltip = 'Up to date';
     }
-    
+
     this.contextValue = packageInfo.isOutdated ? 'outdatedPackage' : 'upToDatePackage';
-    
-    // Add click command
+
     this.command = {
       command: 'pubgrade.itemClick',
       title: 'Package Actions',
@@ -47,53 +62,93 @@ export class PackageTreeItem extends vscode.TreeItem {
   }
 }
 
-export class PackageTreeProvider implements vscode.TreeDataProvider<PackageTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<PackageTreeItem | undefined | null | void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  
-  private packages: PackageInfo[] = [];
+type TreeItem = ProjectTreeItem | PackageTreeItem;
 
-  setPackages(packages: PackageInfo[]) {
-    this.packages = packages;
+export class PackageTreeProvider implements vscode.TreeDataProvider<TreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<TreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  private projects: ProjectPackages[] = [];
+
+  // Single project = flat list (backwards compatible), multiple = grouped
+  private get isMonorepo(): boolean {
+    return this.projects.length > 1;
+  }
+
+  setProjects(projects: ProjectPackages[]) {
+    this.projects = projects;
     this._onDidChangeTreeData.fire();
   }
 
-  updatePackage(name: string, newVersion: string) {
-    const pkg = this.packages.find(p => p.name === name);
-    if (!pkg) return;
-
-    pkg.currentVersion = newVersion;
-    pkg.isOutdated = PubDevClient.isOutdated(newVersion, pkg.latestVersion);
-    pkg.updateType = PubDevClient.getUpdateType(newVersion, pkg.latestVersion);
+  // Convenience for single-project usage
+  setPackages(packages: PackageInfo[]) {
+    this.projects = [{ projectName: '', pubspecPath: '', packages }];
     this._onDidChangeTreeData.fire();
+  }
+
+  updatePackage(name: string, newVersion: string, pubspecPath?: string) {
+    for (const project of this.projects) {
+      // If pubspecPath given, target that project; otherwise search all
+      if (pubspecPath && project.pubspecPath !== pubspecPath) continue;
+
+      const pkg = project.packages.find(p => p.name === name);
+      if (!pkg) continue;
+
+      pkg.currentVersion = newVersion;
+      pkg.isOutdated = PubDevClient.isOutdated(newVersion, pkg.latestVersion);
+      pkg.updateType = PubDevClient.getUpdateType(newVersion, pkg.latestVersion);
+      this._onDidChangeTreeData.fire();
+      return;
+    }
   }
 
   getOutdatedCount(): number {
-    return this.packages.filter(p => p.isOutdated).length;
+    return this.projects.reduce(
+      (sum, p) => sum + p.packages.filter(pkg => pkg.isOutdated).length, 0
+    );
   }
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: PackageTreeItem): vscode.TreeItem {
+  getTreeItem(element: TreeItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: PackageTreeItem): Thenable<PackageTreeItem[]> {
+  getChildren(element?: TreeItem): Thenable<TreeItem[]> {
     if (!element) {
-      // Sort: outdated packages first, then up-to-date packages
-      const sorted = [...this.packages].sort((a, b) => {
-        if (a.isOutdated && !b.isOutdated) return -1;
-        if (!a.isOutdated && b.isOutdated) return 1;
-        return a.name.localeCompare(b.name); // Alphabetical within each group
-      });
-      
-      return Promise.resolve(
-        sorted.map(pkg => new PackageTreeItem(pkg, vscode.TreeItemCollapsibleState.None))
-      );
+      if (this.isMonorepo) {
+        // Top level: project nodes, sorted by outdated count desc
+        const sorted = [...this.projects].sort((a, b) => {
+          const aOut = a.packages.filter(p => p.isOutdated).length;
+          const bOut = b.packages.filter(p => p.isOutdated).length;
+          if (aOut !== bOut) return bOut - aOut;
+          return a.projectName.localeCompare(b.projectName);
+        });
+        return Promise.resolve(
+          sorted.map(p => new ProjectTreeItem(p, vscode.TreeItemCollapsibleState.Collapsed))
+        );
+      } else {
+        // Single project: flat list (same behavior as before)
+        return Promise.resolve(this.sortedPackageItems(this.projects[0]?.packages || []));
+      }
     }
+
+    // Children of a project node
+    if (element instanceof ProjectTreeItem) {
+      return Promise.resolve(this.sortedPackageItems(element.project.packages));
+    }
+
     return Promise.resolve([]);
   }
-}
 
+  private sortedPackageItems(packages: PackageInfo[]): PackageTreeItem[] {
+    const sorted = [...packages].sort((a, b) => {
+      if (a.isOutdated && !b.isOutdated) return -1;
+      if (!a.isOutdated && b.isOutdated) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return sorted.map(pkg => new PackageTreeItem(pkg, vscode.TreeItemCollapsibleState.None));
+  }
+}
