@@ -171,7 +171,7 @@ export class PubDevClient {
       // Match version headers in two formats:
       // 1. Markdown headings: ## 1.2.3, # 1.2.3, ## [1.2.3]
       // 2. Plain version lines: v4.5.3 (some authors skip markdown headings entirely)
-      const versionMatch = line.match(/^(?:#+ ?\[?v?|v)(\d+\.\d+\.\d+[^\]\s]*)\]?\s*$/);
+      const versionMatch = line.match(/^(?:#+ ?\[?v?|v)(\d+\.\d+\.\d+[^\]\s]*)\]?/);
       
       if (versionMatch) {
         const version = versionMatch[1];
