@@ -6,8 +6,8 @@ export class Updater {
     try {
       const content = fs.readFileSync(pubspecPath, 'utf8');
       
-      // Match the package name and its version (capture prefix like ^)
-      const regex = new RegExp(`(\\s+${packageName}:\\s*)(\\^?)([^\\n]+)`, 'g');
+      // Match only indented entries (under dependencies/dev_dependencies), not root-level config sections
+      const regex = new RegExp(`([ \\t]+${packageName}:\\s*)(\\^?)(\\d[^\\n]*)`, 'm');
       const updatedContent = content.replace(regex, (match, prefix, caret) => {
         // Preserve caret if it was there, otherwise no caret
         return `${prefix}${caret}${newVersion}`;
