@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1 - Monorepo Support
+
+- Added support for `fvm`
+
 ## 2.0.0 - Monorepo Support
 
 - Monorepo support: auto-detects all pubspec.yaml files and groups packages by project
