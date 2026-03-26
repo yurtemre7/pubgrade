@@ -4,7 +4,7 @@ import * as yaml from 'js-yaml';
 import * as vscode from 'vscode';
 import { PubspecDependency } from './types';
 
-const EXCLUDED_DIRS = ['build', '.dart_tool', '.symlinks', '.plugin_symlinks', 'ios', 'android', 'web', 'macos', 'linux', 'windows'];
+const EXCLUDED_DIRS = ['build', '.dart_tool', '.symlinks', '.plugin_symlinks', 'ios', 'android', 'web', 'macos', 'linux', 'windows', '.fvm'];
 
 export class PubspecParser {
   static parse(filePath: string): PubspecDependency[] {
