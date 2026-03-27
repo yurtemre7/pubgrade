@@ -1,8 +1,8 @@
 # Changelog
 
-## 2.0.1 - Monorepo Support
+## 2.0.1
 
-- Added support for `fvm`
+- Exclude `.fvm/` directory from pubspec scanning
 
 ## 2.0.0 - Monorepo Support
 
