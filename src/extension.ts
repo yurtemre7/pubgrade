@@ -9,6 +9,7 @@ import { PackageInfo, PubspecDependency, ProjectPackages } from './types';
 let treeProvider: PackageTreeProvider;
 let statusBarItem: vscode.StatusBarItem;
 let treeView: vscode.TreeView<any>;
+const changelogCache: Map<String, any> = new Map<String, any>();
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Flutter Pubgrade extension activated');
@@ -145,6 +146,7 @@ async function processProject(
 }
 
 async function refreshPackages() {
+  changelogCache.clear();
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) return;
 
@@ -212,20 +214,28 @@ function updateStatusBar() {
 
 async function showChangelogAsDocument(packageInfo: PackageInfo) {
   try {
-    const changelog = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Fetching changelog for ${packageInfo.name}...`,
-        cancellable: false
-      },
-      async () => {
-        return await PubDevClient.getChangelog(
-          packageInfo.name,
-          packageInfo.currentVersion,
-          packageInfo.latestVersion
-        );
-      }
-    );
+    const changelogFromCache = changelogCache.get(packageInfo.name);
+    let changelog;
+
+    if (changelogFromCache === undefined) {
+      changelog = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Fetching changelog for ${packageInfo.name}...`,
+          cancellable: false
+        },
+        async () => {
+          return await PubDevClient.getChangelog(
+            packageInfo.name,
+            packageInfo.currentVersion,
+            packageInfo.latestVersion
+          );
+        }
+      );
+      changelogCache.set(packageInfo.name, changelog);
+    } else {
+      changelog = changelogFromCache;
+    }
 
     ChangelogView.show(
       packageInfo.name,
@@ -246,6 +256,7 @@ async function showChangelogAsDocument(packageInfo: PackageInfo) {
     );
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to fetch changelog: ${error}`);
+    changelogCache.clear();
   }
 }
 
